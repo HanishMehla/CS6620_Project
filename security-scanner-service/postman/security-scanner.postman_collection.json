@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "Security Scanner - Part 1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Set the collection variables api_url, api_key and target_url from the Terraform outputs, then run the requests in order."
+  },
+  "variable": [
+    {
+      "key": "api_url",
+      "value": ""
+    },
+    {
+      "key": "api_key",
+      "value": ""
+    },
+    {
+      "key": "other_team_key",
+      "value": ""
+    },
+    {
+      "key": "target_url",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "uploadUrl",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "SAST",
+      "item": [
+        {
+          "name": "1. Create SAST job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs",
+            "description": "Returns a jobId and a signed S3 link for the zip. Both are saved as collection variables.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"SAST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 and waiting for upload', () => { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('jobId', body.jobId);",
+                  "pm.collectionVariables.set('uploadUrl', body.uploadUrl);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Upload the zip",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{uploadUrl}}",
+            "description": "In the Body tab choose binary and select a zip of JavaScript files. No API key: the signed link is the permission.",
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('upload accepted', () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Start the scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs/{{jobId}}/start",
+            "description": "Checks the zip is in S3 and puts the job on the SAST queue."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 and queued', () => { pm.response.to.have.status(202); pm.expect(pm.response.json().status).to.eql('QUEUED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Start it again (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs/{{jobId}}/start",
+            "description": "The status only changes if it is still WAITING_FOR_UPLOAD, so a job can't be queued twice."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('second start is refused', () => { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pentest",
+      "item": [
+        {
+          "name": "Submit pentest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs",
+            "description": "The target must be a host registered to the team.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"PENTEST\",\n  \"targetUrl\": \"{{target_url}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 and queued', () => { pm.response.to.have.status(202); });",
+                  "pm.collectionVariables.set('jobId', pm.response.json().jobId);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Checks that should be refused",
+      "item": [
+        {
+          "name": "No API key (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{api_url}}/jobs",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"SAST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown scan type (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"DAST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other team scans our target (expect 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{other_team_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"PENTEST\",\n  \"targetUrl\": \"{{target_url}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unregistered target (expect 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{api_url}}/jobs",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scanType\": \"PENTEST\",\n  \"targetUrl\": \"http://169.254.169.254/latest/meta-data/\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
