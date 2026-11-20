@@ -1,0 +1,40 @@
+# Credentials and secrets
+.env
+.env.*
+.aws/
+*.pem
+*.key
+*.secret
+credentials
+
+# Terraform state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+
+# Terraform config
+backend.hcl
+*.tfvars
+!*.tfvars.example
+
+# Terraform lock backup
+.terraform.lock.hcl.bak
+
+# Lambda zip
+lambda.zip
+terraform/lambda.zip
+
+# Node dependencies
+node_modules/
+
+# filesystem junk
+.DS_Store
+__MACOSX/
+Thumbs.db
+Desktop.ini
+
+# Editor folders
+.idea/
+.vscode/

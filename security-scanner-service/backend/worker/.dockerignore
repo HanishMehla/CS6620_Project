@@ -1,0 +1,4 @@
+node_modules
+test
+tools/pentest/backend/node_modules
+tools/sast/backend/node_modules
